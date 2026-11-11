@@ -621,7 +621,7 @@ function App() {
     if (open || !landed) return
     opened.current = true
     music.unlock()
-    setOpen(true); setHint(false); setWink((w) => w + 1)
+    setOpen(true); setHint(false)
     setBubble({ lines: WISH, keep: 0, show: true })
     scene.current.popAll()
     const top = project(lz, 0, GIFT.y1, GIFT.z)
@@ -680,7 +680,7 @@ function App() {
         playKey={play}
         onArrive={onArrive}
         delay={1.2}
-        winkDelay={4}
+        winkDelay={-1}
         tapWink={false}
         winkKey={wink}
         laughKey={laugh}
@@ -699,7 +699,7 @@ function App() {
         scale={zk * 100}
         placement={{ x: 0, y: l.placeY }}
         colors={{ clay: "#F4E6E4", visor: "#16131A", eyes: "#FFFFFF" }}
-        outfit={{ wrap: "#FFA3C4", pocket: "#F28DB2", gold: "#E2B862", heart: "#FF5C93" }}
+        outfit={{ wrap: "#FF6FA8", pocket: "#F28DB2", gold: "#E8B84A", heart: "#FF5C93" }}
         background={{ shadow: dancing ? "#12060F" : "#8A5A6A", shadowDepth: dancing ? 55 : 40 }}
         advanced={{ eyeGlow: dancing ? 0.9 : 0.6, skyStrength: dancing ? 0.8 : 1, sunStrength: dancing ? 1.15 : 1 }}
         response={{ track: "page", headTurn: 5, eyeTravel: 6, followSpeed: 5, hop: 0 }}

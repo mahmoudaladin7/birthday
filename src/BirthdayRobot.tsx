@@ -908,6 +908,24 @@ void main() {
                          + uSunCol * max(ndl, 0.0) * sh;
                 rgb = pow(max(alb * lit, 0.0), vec3(1.0 / 2.2));
                 alpha = 1.0;
+                if (!isF && id > 5.5 && id < 8.5) {
+                    // The gift is glossy like the balloons: richer colour, a
+                    // soft studio light from the upper front for highlights,
+                    // a bright rim, and gold that shines warm.
+                    vec3 v = -rd;
+                    float goldAmt = 1.0 - smoothstep(0.0, 0.08, distance(alb, uGold));
+                    rgb = mix(rgb, mix(vec3(1.0, 0.38, 0.64), vec3(0.98, 0.76, 0.32), goldAmt), 0.32);
+                    vec3 key = normalize(vec3(-0.35, 0.8, 0.5));
+                    float sp1 = pow(max(dot(n, normalize(key + v)), 0.0), mix(90.0, 30.0, goldAmt));
+                    float sp2 = pow(max(dot(n, normalize(uSun + v)), 0.0), mix(110.0, 45.0, goldAmt)) * sh;
+                    float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+                    vec3 goldS = vec3(1.0, 0.88, 0.55);
+                    rgb += mix(vec3(0.9), goldS * 1.4, goldAmt) * (0.85 * sp1 + 0.6 * sp2);
+                    rgb += mix(vec3(1.0, 0.8, 0.9) * 0.25, goldS * 0.5, goldAmt) * fres;
+                    // a soft sheen band across the front, like light on foil
+                    float band = exp(-pow((dot(n, normalize(vec3(0.5, 0.6, 0.62))) - 0.86) / 0.06, 2.0));
+                    rgb += mix(vec3(0.18), goldS * 0.35, goldAmt) * band;
+                }
                 if (id > 1.5 && id < 2.5) {
                     vec3 ph = phh;
                     float eW = eWh;
@@ -1488,7 +1506,7 @@ export default function BirthdayRobot({
                     landSq = Math.max(0, cp.squash)
                     if (cp.done) {
                         dropDone = true
-                        winkAt = clock + Math.max(0, p.winkDelay)
+                        if (p.winkDelay >= 0) winkAt = clock + p.winkDelay
                         if (p.waveOnLand) waveDue = clock + 0.1
                         try { arriveRef.current?.() } catch {}
                     }
