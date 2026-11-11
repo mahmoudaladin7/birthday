@@ -1292,6 +1292,8 @@ export default function BirthdayRobot({
         let lastWinkKey: number | null = null
         const heartS: Spring = { x: 0, v: 0 }
         let goneAt = -1
+        let appearAt = -1
+        let giftWas = false
         let goneWas = false
         let danceAt = -1
         let danceAmt = 0
@@ -1540,6 +1542,12 @@ export default function BirthdayRobot({
             let swingR = -swingL
             // Gift scale: a small swell, then gone.
             let giftS = p.gift ? 1 : 0
+            if (p.gift && appearAt >= 0) {
+                // Brought out: pops into his hands with a little overshoot.
+                const g = Math.min(1, (clock - appearAt) / 0.45)
+                const c1 = 1.70158, c3 = c1 + 1
+                giftS = g >= 1 ? 1 : Math.max(0, 1 + c3 * Math.pow(g - 1, 3) + c1 * Math.pow(g - 1, 2))
+            }
             if (p.gift && goneAt >= 0) {
                 const g = (clock - goneAt) / 0.32
                 giftS = g < 0.3 ? 1 + 0.15 * (g / 0.3) : Math.max(0, 1.15 * (1 - (g - 0.3) / 0.7))
@@ -1905,6 +1913,9 @@ export default function BirthdayRobot({
             if (p.friends && !friendsWas) { friendsIn = clock; friendsOut = -1 }
             if (!p.friends && friendsWas && friendsIn >= 0) friendsOut = clock
             friendsWas = p.friends
+            if (p.gift && !giftWas && lastPlay !== null) appearAt = clock
+            if (!p.gift) appearAt = -1
+            giftWas = p.gift
             if (p.giftGone && !goneWas) goneAt = clock
             if (!p.giftGone) goneAt = -1
             goneWas = p.giftGone
@@ -2033,6 +2044,7 @@ export default function BirthdayRobot({
                 laughAt >= 0 ||
                 friendsIn >= 0 ||
                 (goneAt >= 0 && clock - goneAt < 0.4) ||
+                (appearAt >= 0 && clock - appearAt < 0.5) ||
                 heartS.x > 0.01 ||
                 waveDue >= 0 ||
                 scanAt >= 0 ||

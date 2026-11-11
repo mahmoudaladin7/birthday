@@ -71,6 +71,7 @@ function createMusic() {
   let noise: AudioBuffer | null = null
   let timer = 0, next = 0, step = 0, playing = false, level = 0.55, muted = false
   let silent: HTMLAudioElement | null = null
+  let sfx: GainNode | null = null, comp: DynamicsCompressorNode | null = null
   let songData: ArrayBuffer | null = null, songBuf: AudioBuffer | null = null, songNode: AudioBufferSourceNode | null = null
   const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12)
   const env = (g: GainNode, t: number, peak: number, dec: number) => {
@@ -136,8 +137,9 @@ function createMusic() {
       if (!AC) return
       ctx = new AC()
       master = ctx.createGain(); master.gain.value = 0.0001
-      const comp = ctx.createDynamicsCompressor()
+      comp = ctx.createDynamicsCompressor()
       master.connect(comp); comp.connect(ctx.destination)
+      sfx = ctx.createGain(); sfx.gain.value = muted ? 0.0001 : 0.9; sfx.connect(comp)
       noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate)
       const d = noise.getChannelData(0)
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
@@ -165,7 +167,45 @@ function createMusic() {
       window.setTimeout(() => { if (!playing) window.clearInterval(timer); try { n?.stop() } catch {} }, fade * 1000 + 300)
     },
     level(v: number) { level = v; ramp() },
-    mute(m: boolean) { muted = m; ramp() },
+    mute(m: boolean) {
+      muted = m; ramp()
+      if (ctx && sfx) sfx.gain.setTargetAtTime(m ? 0.0001 : 0.9, ctx.currentTime, 0.05)
+    },
+    /** Rocket going up: a rising whistle over a soft hiss. pan -1..1 */
+    whistle(pan: number, dur: number) {
+      if (!ctx || !sfx || !noise) return
+      const t = ctx.currentTime, p = ctx.createStereoPanner(); p.pan.value = pan; p.connect(sfx)
+      const o = ctx.createOscillator(), g = ctx.createGain()
+      o.type = "sine"; o.frequency.setValueAtTime(700, t); o.frequency.exponentialRampToValueAtTime(1900, t + dur)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      o.connect(g); g.connect(p); o.start(t); o.stop(t + dur + 0.05)
+      const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain()
+      s.buffer = noise; s.loop = true; bp.type = "bandpass"; bp.Q.value = 2
+      bp.frequency.setValueAtTime(1800, t); bp.frequency.exponentialRampToValueAtTime(5000, t + dur)
+      ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.07, t + 0.1); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      s.connect(bp); bp.connect(ng); ng.connect(p); s.start(t); s.stop(t + dur + 0.05)
+    },
+    /** Burst: a deep boom, then a scatter of crackles. size 0.6..1.4 */
+    boom(pan: number, size: number) {
+      if (!ctx || !sfx || !noise) return
+      const t = ctx.currentTime, p = ctx.createStereoPanner(); p.pan.value = pan; p.connect(sfx)
+      const s = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+      s.buffer = noise; s.loop = true; lp.type = "lowpass"
+      lp.frequency.setValueAtTime(1400, t); lp.frequency.exponentialRampToValueAtTime(160, t + 1.2)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9 * size, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4)
+      s.connect(lp); lp.connect(g); g.connect(p); s.start(t); s.stop(t + 1.5)
+      const o = ctx.createOscillator(), og = ctx.createGain()
+      o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.35)
+      og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.8 * size, t + 0.01); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.5)
+      o.connect(og); og.connect(p); o.start(t); o.stop(t + 0.55)
+      for (let i = 0; i < 22; i++) {
+        const ct = t + 0.25 + Math.random() * 1.1
+        const c = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), cg = ctx.createGain()
+        c.buffer = noise; hp.type = "highpass"; hp.frequency.value = 2500 + Math.random() * 3000
+        cg.gain.setValueAtTime(0.0001, ct); cg.gain.exponentialRampToValueAtTime(0.12 * size, ct + 0.003); cg.gain.exponentialRampToValueAtTime(0.0001, ct + 0.035)
+        c.connect(hp); hp.connect(cg); cg.connect(p); c.start(ct, Math.random() * 0.4); c.stop(ct + 0.05)
+      }
+    },
   }
 }
 const music = createMusic()
@@ -180,7 +220,8 @@ function useScene(front: React.RefObject<HTMLCanvasElement>, back: React.RefObje
   const api = useRef({
     burst: (_x: number, _y: number, _n: number, _up: number, _cols?: string[]) => {},
     hitBalloon: (_x: number, _y: number) => false,
-    popAll: () => {},
+    popAll: (_forever?: boolean) => {},
+    bringBack: () => {},
   })
   useEffect(() => {
     const fc = front.current!, bc = back.current!
@@ -225,9 +266,10 @@ function useScene(front: React.RefObject<HTMLCanvasElement>, back: React.RefObje
       burst(g.x, g.y, 26, 6, [b.c, b.c, WHITE, GOLD])
     }
     // Every balloon pops in quick succession; they drift back up a while later.
-    const popAll = () => {
-      balloons.forEach((b, i) => window.setTimeout(() => { if (b.state !== "gone") popOne(b, 7 + i * 0.4) }, i * 110))
+    const popAll = (forever = false) => {
+      balloons.forEach((b, i) => window.setTimeout(() => { if (b.state !== "gone") popOne(b, forever ? 1e9 : 7 + i * 0.4) }, i * 110))
     }
+    const bringBack = () => balloons.forEach((b, i) => { if (b.state === "gone") { b.state = "rise"; b.t = -0.25 * i; b.y = H + 200 } })
     const hitBalloon = (x: number, y: number) => {
       for (const b of balloons) {
         if (b.state === "gone") continue
@@ -239,7 +281,7 @@ function useScene(front: React.RefObject<HTMLCanvasElement>, back: React.RefObje
       }
       return false
     }
-    api.current = { burst, hitBalloon, popAll }
+    api.current = { burst, hitBalloon, popAll, bringBack }
 
     let now = 0, last = performance.now(), raf = 0
     const drawBalloon = (b: Balloon) => {
@@ -313,7 +355,7 @@ function useScene(front: React.RefObject<HTMLCanvasElement>, back: React.RefObje
 
 /* ------------------------------------------------------------ club */
 
-type ClubState = { on: boolean; l: Layout; bpm: number; beat0: number }
+type ClubState = { on: boolean; l: Layout; bpm: number; beat0: number; night: boolean; launch: number[] }
 
 /** The party: the room dims, a mirror ball turns, coloured beams sweep and
  *  a stage with bulb lights sits under the dancers, all pulsing on the beat. */
@@ -322,7 +364,11 @@ function useClub(canvas: React.RefObject<HTMLCanvasElement>, state: React.Mutabl
     const c = canvas.current!
     const g = c.getContext("2d")!
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    let W = 0, H = 0, dpr = 1, raf = 0, amt = 0, last = performance.now()
+    let W = 0, H = 0, dpr = 1, raf = 0, amt = 0, namt = 0, last = performance.now()
+    type Rocket = { x: number; y: number; vx: number; vy: number; ty: number; col: string[]; size: number; trail: { x: number; y: number }[] }
+    type Spark = { x: number; y: number; vx: number; vy: number; life: number; max: number; c: string; glitter: boolean }
+    const rockets: Rocket[] = [], sparks: Spark[] = []
+    const FW = [["255, 92, 158", "255, 190, 220"], ["246, 210, 122", "255, 245, 210"], ["184, 156, 242", "235, 225, 255"], ["255, 255, 255", "255, 214, 150"]]
     const size = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2)
       W = window.innerWidth; H = window.innerHeight
@@ -336,8 +382,61 @@ function useClub(canvas: React.RefObject<HTMLCanvasElement>, state: React.Mutabl
       const dt = Math.min(0.05, (t - last) / 1000); last = t
       const st = state.current
       amt += ((st.on ? 1 : 0) - amt) * Math.min(1, dt * (st.on ? 2.5 : 1.8))
+      namt += ((st.night ? 1 : 0) - namt) * Math.min(1, dt * 1.6)
       g.setTransform(dpr, 0, 0, dpr, 0, 0)
       g.clearRect(0, 0, W, H)
+      // Fireworks: launch requests come in as sizes; each rocket whistles up,
+      // bursts with a boom into a ring of sparks, some of them glittering.
+      while (st.launch.length) {
+        const size = st.launch.shift()!
+        const x = W * (0.18 + Math.random() * 0.64)
+        const ty = H * (0.1 + Math.random() * 0.22)
+        const flight = 1.0 + Math.random() * 0.25
+        rockets.push({ x, y: H + 10, vx: (Math.random() - 0.5) * 30, vy: -(H + 10 - ty) / flight, ty, col: FW[(Math.random() * FW.length) | 0], size, trail: [] })
+        music.whistle((x / W) * 2 - 1, flight)
+      }
+      if (namt > 0.002) {
+        const sky = g.createLinearGradient(0, 0, 0, H)
+        sky.addColorStop(0, `rgba(12, 10, 40, ${0.92 * namt})`)
+        sky.addColorStop(0.75, `rgba(40, 20, 70, ${0.85 * namt})`)
+        sky.addColorStop(1, `rgba(80, 30, 80, ${0.75 * namt})`)
+        g.fillStyle = sky; g.fillRect(0, 0, W, H)
+      }
+      if (rockets.length || sparks.length) {
+        g.globalCompositeOperation = "lighter"
+        for (let i = rockets.length - 1; i >= 0; i--) {
+          const r = rockets[i]
+          r.trail.push({ x: r.x, y: r.y }); if (r.trail.length > 10) r.trail.shift()
+          r.x += r.vx * dt; r.y += r.vy * dt
+          g.strokeStyle = `rgba(${r.col[1]}, 0.7)`; g.lineWidth = 2
+          g.beginPath(); r.trail.forEach((p, k) => (k ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.stroke()
+          if (r.y <= r.ty) {
+            rockets.splice(i, 1)
+            const n = Math.round(110 * r.size), sp = Math.min(W, 600) * 0.4 * r.size
+            for (let k = 0; k < n; k++) {
+              const a = (k / n) * Math.PI * 2 + Math.random() * 0.1
+              const v = sp * (0.75 + Math.random() * 0.3)
+              sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 1.3 + Math.random() * 0.6, c: r.col[k % 2], glitter: Math.random() < 0.35 })
+            }
+            const flash = g.createRadialGradient(r.x, r.y, 0, r.x, r.y, sp * 0.6)
+            flash.addColorStop(0, `rgba(${r.col[1]}, 0.55)`); flash.addColorStop(1, `rgba(${r.col[1]}, 0)`)
+            g.fillStyle = flash; g.beginPath(); g.arc(r.x, r.y, sp * 0.6, 0, Math.PI * 2); g.fill()
+            music.boom((r.x / W) * 2 - 1, r.size)
+          }
+        }
+        for (let i = sparks.length - 1; i >= 0; i--) {
+          const s = sparks[i]
+          s.life += dt
+          if (s.life > s.max) { sparks.splice(i, 1); continue }
+          s.vx *= 0.965; s.vy = s.vy * 0.965 + 90 * dt
+          s.x += s.vx * dt; s.y += s.vy * dt
+          const f = 1 - s.life / s.max
+          const tw = s.glitter ? (Math.sin(s.life * 40 + s.x) > 0 ? 1 : 0.15) : 1
+          g.fillStyle = `rgba(${s.c}, ${f * tw})`
+          g.beginPath(); g.arc(s.x, s.y, 1.6 + 2.2 * f, 0, Math.PI * 2); g.fill()
+        }
+        g.globalCompositeOperation = "source-over"
+      }
       if (amt > 0.002) {
         const time = t / 1000
         const beat = Math.max(0, ((t - st.beat0) / 1000) * (st.bpm / 60))
@@ -515,11 +614,13 @@ function App() {
     return () => cancelAnimationFrame(raf)
   }, [group, l])
   const lz: Layout = { ...l, k: zk }
+  const lzRef = useRef(lz)
+  lzRef.current = lz
   const front = useRef<HTMLCanvasElement>(null)
   const back = useRef<HTMLCanvasElement>(null)
   const scene = useScene(front, back)
   const clubCanvas = useRef<HTMLCanvasElement>(null)
-  const club = useRef<ClubState>({ on: false, l: lz, bpm: BEAT_BPM, beat0: 0 })
+  const club = useRef<ClubState>({ on: false, l: lz, bpm: BEAT_BPM, beat0: 0, night: false, launch: [] })
   club.current.l = lz
   useClub(clubCanvas, club)
 
@@ -527,6 +628,7 @@ function App() {
   const [landed, setLanded] = useState(false)
   const [hint, setHint] = useState(false)
   const [open, setOpen] = useState(false)
+  const [giftOut, setGiftOut] = useState(false)
   const [heart, setHeart] = useState(false)
   const [gone, setGone] = useState(false)
   const [dancing, setDancing] = useState(false)
@@ -548,7 +650,13 @@ function App() {
 
   const onArrive = useCallback(() => {
     setLanded(true)
-    later(() => { if (!opened.current) setHint(true) }, 4000) // he waves now, winks on his own at 4 s; the hint comes with it
+    // He waves first, then brings out the present with a little sparkle.
+    later(() => {
+      setGiftOut(true)
+      const c = project(lzRef.current, 0, (GIFT.y0 + GIFT.y1) / 2, GIFT.z)
+      later(() => scene.current.burst(c.x, c.y, 34, 5, [GOLD, "#F6D27A", WHITE, PINK]), 120)
+    }, 2400)
+    later(() => { if (!opened.current) setHint(true) }, 4600)
   }, [])
 
   const [bpm, setBpm] = useState(BEAT_BPM)
@@ -595,13 +703,23 @@ function App() {
       setBubble({ lines: [q, { t: j.a, cls: "punch" }], keep: words, show: true })
       later(() => {
         setLaugh((n) => n + 1)
-        later(() => { setHeart(true); setExtras(true) }, 1600)
+        later(() => setHeart(true), 1600)
         later(() => setWink((w) => w + 1), 2300)   // a heart-eyed wink to finish
+        later(() => setBubble((b) => ({ ...b, show: false })), 3600)
+        // Fireworks in a night sky (turned off for now; uncomment to bring back,
+        // and move the three finale steps below back to 12200 / 14200).
+        // later(() => { club.current.night = true }, 3900)
+        // const shots = [1, 0.9, 1.1, 0.8, 1, 1.2, 0.9, 1.4]
+        // const at = [4500, 5100, 5500, 6200, 6600, 7300, 7700, 8600]
+        // shots.forEach((size, i) => later(() => club.current.launch.push(size), at[i]))
+        // later(() => club.current.launch.push(1.2), 8750)
+        // later(() => { club.current.night = false }, 11600)
+        // Finale: the balloons pop for good, a last sprinkle of confetti, done.
         later(() => {
-          setBubble((b) => ({ ...b, show: false }))
-          for (let i = 0; i < 6; i++) later(() => scene.current.burst(window.innerWidth * (0.1 + 0.16 * i), -10, 14, 2, CONFETTI), i * 140)
-        }, 3800)
-        later(() => setHeart(false), 5600)
+          scene.current.popAll(true)
+          for (let i = 0; i < 6; i++) later(() => scene.current.burst(window.innerWidth * (0.1 + 0.16 * i), -10, 14, 2, CONFETTI), 300 + i * 140)
+        }, 4200)
+        later(() => { setHeart(false); setExtras(true) }, 6200)
       }, j.a.split(" ").length * 230 + 150)
     }, words * 230 + 1100)
   }
@@ -618,7 +736,7 @@ function App() {
   }
 
   const openGift = () => {
-    if (open || !landed) return
+    if (open || !landed || !giftOut) return
     opened.current = true
     music.unlock()
     setOpen(true); setHint(false)
@@ -632,9 +750,12 @@ function App() {
     clearLater()
     opened.current = false
     music.stop(); setSound(false)
-    setLanded(false); setHint(false); setOpen(false); setHeart(false); setGone(false); setDancing(false); setExtras(false)
+    setLanded(false); setHint(false); setOpen(false); setGiftOut(false); setHeart(false); setGone(false); setDancing(false); setExtras(false)
     setFriends(false); setGroup(false)
     club.current.on = false
+    club.current.night = false
+    club.current.launch.length = 0
+    scene.current.bringBack()
     setBubble({ lines: WISH, keep: 0, show: false })
     setPlay((p) => p + 1)
   }
@@ -643,7 +764,7 @@ function App() {
     const x = e.clientX, y = e.clientY
     const a = project(lz, -GIFT.x, GIFT.y1, GIFT.z), b = project(lz, GIFT.x, GIFT.y0, GIFT.z)
     const pad = 18
-    if (landed && !open && x > a.x - pad && x < b.x + pad && y > a.y - pad * 2 && y < b.y + pad) { openGift(); return }
+    if (landed && giftOut && !open && x > a.x - pad && x < b.x + pad && y > a.y - pad * 2 && y < b.y + pad) { openGift(); return }
     const h0 = project(lz, -HALF_W, HEAD_TOP, 0), h1 = project(lz, HALF_W, 0, 0)
     if (landed && x > h0.x && x < h1.x && y > h0.y && y < h1.y) {
       // One tap winks; a quick second tap turns his eyes to hearts for a moment.
@@ -684,7 +805,7 @@ function App() {
         tapWink={false}
         winkKey={wink}
         laughKey={laugh}
-        gift
+        gift={giftOut}
         giftOpen={open}
         giftGone={gone}
         dancing={dancing}
