@@ -1,0 +1,163 @@
+<title>عيد ميلاد رنيم</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700&family=Pacifico&display=swap">
+<style>
+/* One full-screen stage: a blush sky with R-O-R-O balloons behind the robot,
+   confetti in front, the wish bubble above his head, two quiet pills below. */
+:root {
+  --sky: #F7D6E2;
+  --cream: #FCEEE6;
+  --paper: #FFFBF8;
+  --ink: #3A2430;
+  --muted: #8A6676;
+  --rose: #C83E74;
+  --gold: #C9A04F;
+  --script: "Pacifico", "Brush Script MT", cursive;
+  --font: "Alexandria", "Segoe UI", Tahoma, system-ui, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: linear-gradient(180deg, var(--sky), var(--cream));
+  color: var(--ink);
+  font-family: var(--font);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+#root { height: 100%; }
+.stage { position: relative; height: 100%; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.front { z-index: 2; }
+.bubble-wrap {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 3;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.bubble {
+  position: relative;
+  width: min(100%, 400px);
+  background: var(--paper);
+  border-radius: 24px;
+  padding: 16px 22px 18px;
+  box-shadow: 0 1px 0 rgba(58, 36, 48, 0.06), 0 16px 36px -14px rgba(160, 70, 100, 0.4);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(10px) scale(0.9);
+  transform-origin: 50% 100%;
+  transition: opacity 0.35s ease, transform 0.55s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.bubble::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -9px;
+  width: 20px; height: 20px; margin-left: -10px;
+  background: var(--paper);
+  border-radius: 0 0 5px 0;
+  transform: rotate(45deg);
+}
+.bubble.on { opacity: 1; transform: none; }
+.bubble p { margin: 0; text-wrap: balance; }
+.bubble .hello { font-size: clamp(1.1rem, 4.6vw, 1.3rem); font-weight: 600; color: var(--muted); }
+.bubble .name { font-size: clamp(1.9rem, 9vw, 2.5rem); font-weight: 700; color: var(--rose); line-height: 1.25; }
+.bubble .thanks { font-size: clamp(1.05rem, 4.4vw, 1.2rem); font-weight: 400; margin-top: 4px; }
+.bubble .joke { font-size: clamp(1.05rem, 4.5vw, 1.2rem); font-weight: 400; line-height: 1.6; }
+.bubble .punch { font-size: clamp(1.2rem, 5.4vw, 1.45rem); font-weight: 700; color: var(--rose); line-height: 1.5; margin-top: 6px; }
+.w { opacity: 0; transition: opacity 0.35s ease; }
+.w.in { opacity: 1; }
+.hint, .replay {
+  position: absolute; left: 50%; z-index: 4;
+  transform: translateX(-50%);
+  font: 600 1rem/1 var(--font);
+  border-radius: 999px;
+  padding: 12px 22px;
+  cursor: pointer;
+  opacity: 0; pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+.hint {
+  color: var(--paper);
+  background: var(--rose);
+  border: 0;
+  box-shadow: 0 10px 24px -10px rgba(200, 62, 116, 0.7);
+  transition: opacity 0.35s ease;
+}
+.hint.on { opacity: 1; pointer-events: auto; animation: nudge 1.6s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
+.replay {
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  color: var(--rose);
+  background: rgba(255, 251, 248, 0.72);
+  border: 1px solid rgba(200, 62, 116, 0.25);
+  font-size: 0.95rem;
+  transition: opacity 0.4s ease 0.6s;
+}
+.replay.on { opacity: 1; pointer-events: auto; }
+/* Paper-cut lettering: a cream top layer over stacked pink, gold and rose
+   layers, each letter cut and tilted on its own. */
+.banner {
+  position: absolute; left: 0; right: 0; z-index: 3;
+  transform: translateY(-50%);
+  text-align: center; white-space: nowrap;
+  font: 400 clamp(2.3rem, 11.5vw, 4.2rem)/1.1 var(--script);
+  color: var(--paper);
+  pointer-events: none;
+}
+.banner span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(-24px) scale(0.5) rotate(var(--r));
+  text-shadow: 1.5px 1.5px 0 #F7B9CF, 3px 3px 0 #F28DB2, 4.5px 4.5px 0 #E2B862, 6px 6px 0 #C83E74,
+    7px 9px 10px rgba(120, 40, 70, 0.3);
+  transition: opacity 0.3s ease, transform 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+  transition-delay: calc(var(--i) * 55ms);
+}
+.banner .gap { width: 0.3em; }
+.banner.on span {
+  opacity: 1;
+  transform: translateY(0) scale(1) rotate(var(--r));
+  animation: sway 2.2s ease-in-out calc(0.9s + var(--i) * 90ms) infinite;
+}
+@keyframes sway {
+  0%, 100% { transform: translateY(0) rotate(var(--r)); }
+  50% { transform: translateY(-4px) rotate(calc(var(--r) * -1)); }
+}
+.extras {
+  position: absolute; left: 0; right: 0; z-index: 4;
+  display: flex; justify-content: center; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  opacity: 0; pointer-events: none; transition: opacity 0.35s ease;
+}
+.extras.on { opacity: 1; pointer-events: auto; }
+.extras button {
+  font: 600 1rem/1 var(--font);
+  color: var(--paper); background: var(--rose);
+  border: 0; border-radius: 999px; padding: 12px 20px; cursor: pointer;
+  box-shadow: 0 10px 24px -10px rgba(200, 62, 116, 0.7);
+}
+.extras button + button { background: var(--gold); box-shadow: 0 10px 24px -10px rgba(170, 125, 40, 0.7); }
+.sound {
+  position: absolute; z-index: 4;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--rose); background: rgba(255, 251, 248, 0.75);
+  border: 1px solid rgba(200, 62, 116, 0.25);
+  cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
+  backdrop-filter: blur(6px);
+}
+.sound.on { opacity: 1; pointer-events: auto; }
+.extras button:focus-visible, .sound:focus-visible,
+.hint:focus-visible, .replay:focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .bubble, .w, .hint, .replay { transition: none; }
+  .hint.on, .banner.on span { animation: none; }
+}
+</style>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
